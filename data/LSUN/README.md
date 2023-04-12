@@ -29,3 +29,6 @@ unzip bedroom_train_lmdb.zip
 unzip bedroom_val_lmdb.zip
 ```
 After unzip these file, we can follow instruction from [here](https://github.com/fyu/lsun) to view and export the images. When extracting the images, should use **--flat** to import all images directly to the destination folder.
+
+## Processing
+The paper downsamples images to 32x32. In this code I downscale it to 64x64.
