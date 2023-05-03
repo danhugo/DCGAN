@@ -1,2 +1,9 @@
 data/LSUN/*
 !data/LSUN/README.md
+!data/LSUN/download_data.sh
+
+__pycache__
+
+models/*.pth
+wandb
+test

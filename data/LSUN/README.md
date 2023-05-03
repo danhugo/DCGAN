@@ -10,16 +10,17 @@ The paper performed a simple image de-duplication manipulation on dataset by usi
 
 Additionally, Images are scaled down to 32x32 resolution and cropped to square centrally. 
 
-## Usage
+## Doanload data
+### Manually
 Download functional files. 
 
 ```
-wget https://raw.githubusercontent.com/fyu/lsun/master/data.py
-wget https://raw.githubusercontent.com/fyu/lsun/master/download.py
+curl -O https://raw.githubusercontent.com/fyu/lsun/master/data.py
+curl -O https://raw.githubusercontent.com/fyu/lsun/master/download.py
 
 ```
 
-After downloading download.py file. Run download data command.
+After downloading download.py file. Run download data command. It is able to specify path download also (check download.py file)
 ```
 python download.py -c bedroom
 ```
@@ -29,6 +30,12 @@ unzip bedroom_train_lmdb.zip
 unzip bedroom_val_lmdb.zip
 ```
 After unzip these file, we can follow instruction from [here](https://github.com/fyu/lsun) to view and export the images. When extracting the images, should use **--flat** to import all images directly to the destination folder.
+### Automatically
+Run download_data.sh file.
+```
+# cd to data/LSUN folder
+bash download_data.sh
+```
 
 ## Processing
-The paper downsamples images to 32x32. In this code I downscale it to 64x64.
+The paper downsamples images to 32x32. In this code I downscale it to 64x64 (check src/data/ for detail).

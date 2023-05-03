@@ -1,0 +1,19 @@
+project: 'LSUN DCGAN' # name of project
+train_size: 1000000 #training data size
+
+# Model setting
+batch_size: 128 # batch size
+noise_dim: 100 # number dimensions of noise
+num_channel: 3 # number channels of the image
+ngf: 64 # number of generation filter
+ndf: 64 # number discriminator filter
+
+# Train setting
+lr: 0.0002 # learning rate
+num_epoch: 5 # number of epoches for training
+beta:
+  beta1: 0.5 # Adam optimizer beta 1
+  beta2: 0.999 # Adam optimizer beta 2
+rows_gen_image: 5 # number rows for a grid of generated images, each contains 10 images
+
+
