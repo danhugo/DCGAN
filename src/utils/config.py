@@ -1,7 +1,7 @@
 import yaml
 from typing import Union
-from .instance import dict_to_object    
-def read_config(path, return_type: str='class', show: bool = True) -> Union[type, dict]:
+from .instance import dict_to_object
+def read_config(path, return_type: str='object', show: bool = True) -> Union[type, dict]:
     """read configuration from .yaml file 
 
     Arguments
@@ -13,7 +13,7 @@ def read_config(path, return_type: str='class', show: bool = True) -> Union[type
         config = yaml.load(f, Loader=yaml.FullLoader)
         f.close()
     show_config(config)
-    if return_type == 'class':
+    if return_type == 'object':
         return dict_to_object(config)
     else:
         return config

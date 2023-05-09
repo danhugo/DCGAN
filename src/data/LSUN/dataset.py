@@ -41,7 +41,9 @@ class LSUNDataset(Dataset):
             raise NotADirectoryError(f"{self.root} does not exist or is not a directory.")
         
         if isinstance(nsample, int) and nsample is not None:
-            self.data = self.data[:nsample]
+            if nsample <= len(self.data):
+                self.data = self.data[:nsample]
+            
 
     def __len__(self):
         return len(self.data)

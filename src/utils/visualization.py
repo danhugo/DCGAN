@@ -2,7 +2,7 @@ from torchvision.utils import make_grid
 import numpy as np
 import imageio
 
-def create_grid_image(images, save = False, path_to_save = 'grid_image.png') -> np.ndarray:
+def create_grid_image(images, nimage_row: int = 10,  save = False, path_to_save = 'grid_image.png') -> np.ndarray:
     '''Create one single grid images comprised of the batch of images
     
     Parameters
@@ -10,13 +10,14 @@ def create_grid_image(images, save = False, path_to_save = 'grid_image.png') -> 
     - images (tensor): size B x C x H x W
     - show (bool): default is False to not show created grid image.
         otherwise, show image.
+    - nimage_row (int): number of images per row
     - path_to_save (str): path to save the grid image.
 
     Return
     ------
     - (ndarray): one single image size H x W x C
     '''
-    img_grid = make_grid(images, nrow=10)
+    img_grid = make_grid(images, nrow=nimage_row)
     img_grid = 255. * np.transpose(img_grid.detach().cpu().numpy(),(1,2,0))
     img_grid = img_grid.astype(np.uint8)
     if save:

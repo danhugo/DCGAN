@@ -4,7 +4,6 @@ import os
 sys.path.append(os.path.abspath('.'))
 
 import time
-import math
 import argparse
 import torch.nn as nn
 import torch.nn.functional as F
@@ -12,6 +11,7 @@ import torch.optim as optim
 import torch
 from torchvision import transforms
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 import src.utils.visualization as visual
 from src import BASE_DIR
@@ -21,10 +21,6 @@ import src.data.LSUN.transforms as Ltransforms
 from src.models import LSUN_MODEL_DIR, LSUN_REPORT_DIR, LSUN_REPORT_IMAGE_DIR, CONFIG_PATH
 import src.utils.wb as wb
 import src.utils.config as cf
-from src.utils.instance import dict_to_object
-
-IMAGES_PER_ROW = 10
-NOISE_DIM = 100
 
 class Generator(nn.Module):
     def __init__(self,num_channel: int = 3, ngf: float = 128) -> None:
@@ -47,8 +43,7 @@ class Generator(nn.Module):
 
         """
         nz = 100 # num of noise dim
-        ngf = 128 # num of gen filter
-        super(Generator,self).__init__()
+        super(Generator, self).__init__()
         self.deconv1 = nn.ConvTranspose2d(nz, ngf * 8, 4, 1, 0, bias=False)
         self.bn1 = nn.BatchNorm2d(ngf * 8)
         self.deconv2 = nn.ConvTranspose2d(ngf * 8, ngf * 4, 4, 2, 1, bias=False)
@@ -57,10 +52,8 @@ class Generator(nn.Module):
         self.bn3 = nn.BatchNorm2d(ngf * 2)
         self.deconv4 = nn.ConvTranspose2d(ngf * 2, ngf, 4 , 2, 1, bias=False)
         self.bn4 = nn.BatchNorm2d(ngf)
-        self.deconv5 = nn.ConvTranspose2d(ngf, num_channel, 4, 2, 1, bias=False)
+        self.deconv5 = nn.ConvTranspose2d(ngf, num_channel, 4, 2, 1, bias=True)
         
-        # self.apply(self._init_weights)
-    
     def _init_weights(self):
         for m in self.modules():
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
@@ -89,7 +82,7 @@ class Discriminator(nn.Module):
 
         Inputs
         ------
-        - input (tensor): N x 3 x 64 x 64, N images with size 3 x 64 x 64
+        - input (tensor): N x C x H x W, N images with size C x H x W
 
         Returns
         - output (tensor): N, vector N discriminative results of N images 
@@ -97,17 +90,15 @@ class Discriminator(nn.Module):
         
         """
         super().__init__()
-        self.conv1 = nn.Conv2d(num_channel, ndf, 4, 2, 1, bias=False)
+        self.conv1 = nn.Conv2d(num_channel, ndf, 4, 2, 1, bias=True)
         self.conv2 = nn.Conv2d(ndf, ndf * 2, 4, 2, 1, bias=False)
         self.bn2 = nn.BatchNorm2d(ndf * 2)
         self.conv3 = nn.Conv2d(ndf * 2, ndf * 4, 4, 2, 1, bias=False)
         self.bn3 = nn.BatchNorm2d(ndf * 4)
         self.conv4 = nn.Conv2d(ndf * 4, ndf * 8, 4, 2, 1, bias=False)
         self.bn4 = nn.BatchNorm2d(ndf * 8)
-        self.conv5 = nn.Conv2d(ndf * 8, 1, 4, 1, 0, bias=False)
+        self.conv5 = nn.Conv2d(ndf * 8, 1, 4, 1, 0, bias=True)
 
-        # self.apply(self._init_weights)
-    
     def _init_weights(self):
         for m in self.modules():
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
@@ -124,6 +115,143 @@ class Discriminator(nn.Module):
         x = x.squeeze()
         
         return x
+
+def train(args):
+    """Train model."""
+    # log parameter
+    end_epoch_log = {
+        "end/Gloss" : 0.0,
+        "end/Dloss" : 0.0,
+        "end/lr" : args.lr,
+    }
+
+    in_epoch_log = {
+        "in/D_real_loss": 0.0,
+        "in/D_fake_loss": 0.0,
+        "in/D_loss": 0.0,
+        "in/G_loss": 0.0,
+    }
+
+    # wandb init
+    wb.on_train_start(args)
+
+    # load data
+    dataloader = load_data(size=args.train_size, batch_size=args.batch_size)
+    print('Finish loading data loader')
+    
+    # get device using for training
+    device = get_device()
+    print(f"device: {device}")
+
+    # declare model
+    # torch.manual_seed(26)
+    G = Generator(args.num_channel, args.ngf).to(device)
+    D = Discriminator(args.num_channel, args.ndf).to(device)
+    G._init_weights()
+    z_dim = args.noise_dim
+
+    optimG = optim.Adam(G.parameters(), lr = args.lr, betas = (args.beta1, args.beta2))
+    optimD = optim.Adam(D.parameters(), lr = args.lr, betas = (args.beta1, args.beta2))
+    
+    # loss fnc
+    criterion = nn.BCELoss()
+
+    # fixed noise for generated image after each epoch
+    # to compare what model has learned
+    fixed_noise = torch.randn((args.rows_gen_image * args.images_per_row, z_dim)).to(device)
+    grid_images = []
+    global_step = 0
+
+    for epoch in range(args.num_epoch):
+        G_losses = []
+        D_losses = []
+        epoch_start_time = time.time()
+        
+        for data in tqdm(dataloader, desc=f'epoch {epoch + 1}'):
+            batch_size = data.size(0)
+            noise = torch.randn((batch_size,z_dim)).to(device)
+            data = data.to(device)
+            # optimize D
+            # optimize with true
+            D.zero_grad(set_to_none=True)
+            output = D(data)
+            print(output[0])
+            labels = torch.ones((batch_size,)).to(device)
+            D_real_loss = criterion(output, labels)
+
+            # optimize with fake
+            fake_samples = G(noise)
+            # nothing to do with G or its output when optimize D
+            # then detach it
+            output = D(fake_samples.detach()) 
+            labels = torch.zeros((batch_size,)).to(device)
+            D_fake_loss = criterion(output, labels)
+
+            D_loss = D_real_loss + D_fake_loss
+            D_losses.append(D_loss)
+            D_loss.backward()
+            optimD.step()
+
+            # optimize G
+            G.zero_grad(set_to_none=True)
+            output = D(fake_samples)
+            labels = torch.ones((batch_size,)).to(device)
+            G_loss = criterion(output, labels)
+            G_losses.append(G_loss)
+            G_loss.backward()
+            optimG.step()
+
+            # log in epoch
+            global_step += 1
+            if global_step % 100 == 0:
+                in_epoch_log['in/D_fake_loss'] = D_fake_loss
+                in_epoch_log['in/D_real_loss'] = D_real_loss
+                in_epoch_log['in/D_loss'] = D_loss
+                in_epoch_log['in/G_loss'] = G_loss
+                wb.in_train_epoch(in_epoch_log, global_step)
+        
+        per_epoch_time = time.time() - epoch_start_time
+        G_mean_loss, D_mean_loss = torch.mean(torch.FloatTensor(G_losses)), torch.mean(torch.FloatTensor(D_losses))
+        print(f"[{epoch+1}/{args.num_epoch}: {per_epoch_time // 60:.0f}m{per_epoch_time % 60:.0f}s] \
+              errG: {G_mean_loss.item():.6f}, errD:{D_mean_loss.item():.6f}")
+        
+        # check pointing for every epoch
+        torch.save(G.state_dict(), os.path.join(LSUN_MODEL_DIR, f'gen_params_{epoch+1}.pth'))
+        torch.save(D.state_dict(), os.path.join(LSUN_MODEL_DIR, f'dis_params_{epoch+1}.pth'))
+
+        # save the image ouput every epoch
+        with torch.no_grad():
+            fake_samples = G(fixed_noise)
+            image_name = f'LSUN_epoch_{epoch+1}'
+            grid_image = visual.create_grid_image(fake_samples, nimage_row=args.images_per_row, save = True, path_to_save=os.path.join(LSUN_REPORT_IMAGE_DIR, f'{image_name}.png'))
+            grid_images.append(grid_image)
+        
+        # log end epoch
+        end_epoch_log['end/Gloss'], end_epoch_log['end/Dloss'] = G_mean_loss, D_mean_loss
+        wb.end_train_epoch(end_epoch_log, global_step)
+        wb.log_image({image_name: grid_image})
+
+    visual.save_gif(os.path.join(LSUN_REPORT_DIR ,f'LSUN_{args.num_epoch}_epoch.gif'), grid_images)
+
+def load_data(size: int = 100000, batch_size: int = 128) -> LSUNDataset:
+    """Return dataloder of LSUN dataset with a chosen size
+    
+    Attributes
+    - size (int): size of dataset to be load (default: 100000)
+    - batch_size (int): batch size (default: 128)
+    Return
+    ------
+    (DataLoader): dataloader of Lsun dataset which comprises list of data (not (data, label))
+    """
+    composed = transforms.Compose([
+        Ltransforms.CenterCrop(),
+        Ltransforms.ReScale(64),
+        transforms.ToTensor()
+    ])
+    
+    dataset = LSUNDataset(os.path.join(BASE_DIR, 'data/LSUN/bedroom_train_data'), nsample=size, transform=composed)
+    train_loader = DataLoader(dataset, batch_size=batch_size, shuffle= True, num_workers=1, pin_memory=torch.cuda.is_available())
+    return train_loader
 
 def config_parser():
     config = cf.read_config(CONFIG_PATH)
@@ -151,134 +279,13 @@ def config_parser():
     parser.add_argument('--beta2', type=float, default=config.beta.beta2,
                         help='Adam optimizer beta 2')
     parser.add_argument('--rows_gen_image', type=int, default=config.rows_gen_image,
-                        help='number rows for a grid of generated images, each contains 10 images')
+                        help='number rows for a grid of generated images, default each contains 10 images')
+    parser.add_argument('--images_per_row', type=int, default=config.images_per_row,
+                        help='number of images per row')
     return parser
 
-def train():
-    """Train model."""
-    # get arguments
+if __name__ == '__main__':
     parser = config_parser()
     args = parser.parse_args()
     args.experiment_name = f's{args.train_size}-bs{args.batch_size}-ep{args.num_epoch}'
-    endlog = {
-        "Gloss" : 0.0,
-        "Dloss" : 0.0,
-        "lr" : args.lr,
-        "epoch": 0
-    }
-    # wandb init
-    wb.on_pretrain_start(args)
-
-    # load data
-    dataloader = load_data(size=args.train_size, batch_size=args.batch_size)
-    print('Finish loading data')
-
-    device = get_device()
-    print(f"You are using {device}")
-
-    # declare model
-    G = Generator(args.num_channel).to(device)
-    D = Discriminator(args.num_channel).to(device)
-    G._init_weights()
-
-    optimG = optim.Adam(G.parameters(), lr = args.lr, betas = (args.beta1, args.beta2))
-    optimD = optim.Adam(D.parameters(), lr = args.lr, betas = (args.beta1, args.beta2))
-    criterion = nn.BCELoss()
-
-    z_dim = NOISE_DIM
-
-    # fixed noise for generated image after each epoch
-    # to compare what model has learned
-    fixed_noise = torch.randn((args.rows_gen_image * IMAGES_PER_ROW, z_dim)).to(device)
-    grid_images = []
-    global_step = 0
-    for epoch in range(args.num_epoch):
-        err_Gs = []
-        err_Ds = []
-        epoch_start_time = time.time()
-        
-        for step, data in enumerate(dataloader):
-            batch_size = data.size(0)
-            noise = torch.randn((batch_size,z_dim)).to(device)
-            data = data.to(device)
-            # optimize D
-            # optimize with true
-            D.zero_grad()
-            output = D(data)
-            labels = torch.ones((batch_size,)).to(device)
-            err_D_true = criterion(output, labels)
-
-            # optimize with fake
-            fake_samples = G(noise)
-            # nothing to do with G or its output when optimize D
-            # then detach it
-            output = D(fake_samples.detach()) 
-            labels = torch.zeros((batch_size,)).to(device)
-            err_D_fake = criterion(output, labels)
-
-            err_D = err_D_true + err_D_fake
-            err_Ds.append(err_D)
-            err_D.backward()
-            optimD.step()
-
-            # optimize G
-            G.zero_grad()
-            output = D(fake_samples)
-            labels = torch.ones((batch_size,)).to(device)
-            err_G = criterion(output, labels)
-            err_Gs.append(err_G)
-            err_G.backward()
-            optimG.step()
-            global_step += 1
-            wb.on_training_epoch(dict_to_object({
-                'Gloss': err_G,
-                'Dloss': err_D,
-                'D_real_loss': err_D_true,
-                'D_fake_loss': err_D_fake,
-                'epoch': (step + 1 + (len(dataloader) * epoch))/len(dataloader),
-                'step': global_step,
-                }))
-        
-        per_epoch_time = time.time() - epoch_start_time
-        mean_G_loss, mean_D_loss = torch.mean(torch.FloatTensor(err_Gs)), torch.mean(torch.FloatTensor(err_Ds))
-        print(f"[{epoch+1}/{args.num_epoch}: {per_epoch_time // 60:.0f}m{per_epoch_time % 60:.0f}s] \
-              errG: {mean_G_loss.item():.6f}, errD:{mean_D_loss.item():.6f}")
-        
-        # check pointing for every epoch
-        torch.save(G.state_dict(), os.path.join(LSUN_MODEL_DIR, f'gen_params_{epoch+1}.pth'))
-        torch.save(G.state_dict(), os.path.join(LSUN_MODEL_DIR, f'dis_params_{epoch+1}.pth'))
-
-        # save the image ouput every epoch
-        fake_samples = G(fixed_noise)
-        grid_image = visual.create_grid_image(fake_samples, save = True, path_to_save=os.path.join(LSUN_REPORT_IMAGE_DIR, f'LSUN_epoch_{epoch+1}.png'))
-        grid_images.append(grid_image)
-        
-        endlog['step'] = global_step
-        endlog['Gloss'], endlog['Dloss'] = mean_G_loss, mean_D_loss
-        endlog['gen_image'] = {'name': f'LSUN_epoch_{epoch+1}', 'data': grid_image}
-        wb.on_train_epoch_end(dict_to_object(endlog))
-
-    visual.save_gif(os.path.join(LSUN_REPORT_DIR ,f'LSUN_{args.num_epoch}_epoch.gif'),grid_images)
-
-def load_data(size: int = 100000, batch_size: int = 128) -> LSUNDataset:
-    """Return dataloder of LSUN dataset with a chosen size
-    
-    Attributes
-    - size (int): size of dataset to be load (default: 100000)
-    - batch_size (int): batch size (default: 128)
-    Return
-    ------
-    (DataLoader): dataloader of Lsun dataset which comprises list of data (not (data, label))
-    """
-    composed = transforms.Compose([
-        Ltransforms.CenterCrop(),
-        Ltransforms.ReScale(64),
-        transforms.ToTensor()
-    ])
-    
-    dataset = LSUNDataset(os.path.join(BASE_DIR, 'data/LSUN/bedroom_train_data'), nsample=size, transform=composed)
-    train_loader = DataLoader(dataset, batch_size= batch_size, shuffle= True)
-    return train_loader
-
-if __name__ == '__main__':
-    train()
+    train(args)

@@ -1,5 +1,5 @@
 # DCGAN - Deep Convolutional Generative Adversarial Networks
-## [Dao Duy Hung](https://github.com/daoduyhungkaistgit) - [KAIST](https://www.kaist.ac.kr/newsen/html/news/?skey=college&sval=QS+World+University+Ranking)
+## [Dao Duy Hung](https://github.com/daoduyhungkaistgit) - [KAIST](https://www.kaist.ac.kr/en/)
 
 This project is conducted for the sake of reimplementation of the main paper. The project is implemented mainly with **Pytorch**.  
 Paper: [Unsupervised Representation Learning with Deep Convolutional Generative Adversarial Networks](http://arxiv.org/abs/1511.06434)

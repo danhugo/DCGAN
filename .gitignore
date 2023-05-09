@@ -4,6 +4,8 @@ data/LSUN/*
 
 __pycache__
 
-models/*.pth
+*.pth
 wandb
 test
+
+*.zip
