@@ -1,6 +1,6 @@
 import sys
 import os
-
+import datetime
 sys.path.append(os.path.abspath('.'))
 
 import time
@@ -46,14 +46,22 @@ class Generator(nn.Module):
         super(Generator, self).__init__()
         self.deconv1 = nn.ConvTranspose2d(nz, ngf * 8, 4, 1, 0, bias=False)
         self.bn1 = nn.BatchNorm2d(ngf * 8)
+        self.relu1 = nn.ReLU()
+        
         self.deconv2 = nn.ConvTranspose2d(ngf * 8, ngf * 4, 4, 2, 1, bias=False)
         self.bn2 = nn.BatchNorm2d(ngf * 4)
+        self.relu2 = nn.ReLU()
+
         self.deconv3 = nn.ConvTranspose2d(ngf * 4, ngf * 2, 4, 2, 1, bias=False)
         self.bn3 = nn.BatchNorm2d(ngf * 2)
+        self.relu3 = nn.ReLU()
+
         self.deconv4 = nn.ConvTranspose2d(ngf * 2, ngf, 4 , 2, 1, bias=False)
         self.bn4 = nn.BatchNorm2d(ngf)
+        self.relu4 = nn.ReLU()
+
         self.deconv5 = nn.ConvTranspose2d(ngf, num_channel, 4, 2, 1, bias=True)
-        
+
     def _init_weights(self):
         for m in self.modules():
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
@@ -63,10 +71,10 @@ class Generator(nn.Module):
 
     def forward(self, x):
         x = x[:,:,None,None]
-        x = F.relu(self.bn1(self.deconv1(x))) # 1 x 1 -> 4 x 4
-        x = F.relu(self.bn2(self.deconv2(x))) # 4 x 4 -> 8 x 8
-        x = F.relu(self.bn3(self.deconv3(x))) # 8 x 8 -> 16 x 16
-        x = F.relu(self.bn4(self.deconv4(x))) # 16 x 16 -> 32 x 32
+        x = self.relu1(self.bn1(self.deconv1(x))) # 1 x 1 -> 4 x 4
+        x = self.relu2(self.bn2(self.deconv2(x))) # 4 x 4 -> 8 x 8
+        x = self.relu3(self.bn3(self.deconv3(x))) # 8 x 8 -> 16 x 16
+        x = self.relu4(self.bn4(self.deconv4(x))) # 16 x 16 -> 32 x 32
         x = torch.tanh(self.deconv5(x))       # 32 x 32 -> 64 x 64
         
         return x
@@ -91,12 +99,20 @@ class Discriminator(nn.Module):
         """
         super().__init__()
         self.conv1 = nn.Conv2d(num_channel, ndf, 4, 2, 1, bias=True)
+        self.leaky_relu1 = nn.LeakyReLU(0.2)
+        
         self.conv2 = nn.Conv2d(ndf, ndf * 2, 4, 2, 1, bias=False)
         self.bn2 = nn.BatchNorm2d(ndf * 2)
+        self.leaky_relu2 = nn.LeakyReLU(0.2)
+        
         self.conv3 = nn.Conv2d(ndf * 2, ndf * 4, 4, 2, 1, bias=False)
         self.bn3 = nn.BatchNorm2d(ndf * 4)
+        self.leaky_relu3 = nn.LeakyReLU(0.2)
+        
         self.conv4 = nn.Conv2d(ndf * 4, ndf * 8, 4, 2, 1, bias=False)
         self.bn4 = nn.BatchNorm2d(ndf * 8)
+        self.leaky_relu4 = nn.LeakyReLU(0.2)
+        
         self.conv5 = nn.Conv2d(ndf * 8, 1, 4, 1, 0, bias=True)
 
     def _init_weights(self):
@@ -107,10 +123,10 @@ class Discriminator(nn.Module):
                     nn.init.zeros_(m.bias)
 
     def forward(self, x):
-        x = F.leaky_relu(self.conv1(x))
-        x = F.leaky_relu(self.bn2(self.conv2(x)), negative_slope = 0.2)
-        x = F.leaky_relu(self.bn3(self.conv3(x)), negative_slope = 0.2)
-        x = F.leaky_relu(self.bn4(self.conv4(x)), negative_slope = 0.2)
+        x = self.leaky_relu1(self.conv1(x))
+        x = self.leaky_relu2(self.bn2(self.conv2(x)))
+        x = self.leaky_relu3(self.bn3(self.conv3(x)))
+        x = self.leaky_relu4(self.bn4(self.conv4(x)))
         x = torch.sigmoid(self.conv5(x))
         x = x.squeeze()
         
@@ -175,7 +191,6 @@ def train(args):
             # optimize with true
             D.zero_grad(set_to_none=True)
             output = D(data)
-            print(output[0])
             labels = torch.ones((batch_size,)).to(device)
             D_real_loss = criterion(output, labels)
 
@@ -216,8 +231,8 @@ def train(args):
               errG: {G_mean_loss.item():.6f}, errD:{D_mean_loss.item():.6f}")
         
         # check pointing for every epoch
-        torch.save(G.state_dict(), os.path.join(LSUN_MODEL_DIR, f'gen_params_{epoch+1}.pth'))
-        torch.save(D.state_dict(), os.path.join(LSUN_MODEL_DIR, f'dis_params_{epoch+1}.pth'))
+        torch.save(G.state_dict(), os.path.join(SAVE_MODEL_DIR, f'gen_params_{epoch+1}.pth'))
+        torch.save(D.state_dict(), os.path.join(SAVE_MODEL_DIR, f'dis_params_{epoch+1}.pth'))
 
         # save the image ouput every epoch
         with torch.no_grad():
@@ -287,5 +302,8 @@ def config_parser():
 if __name__ == '__main__':
     parser = config_parser()
     args = parser.parse_args()
-    args.experiment_name = f's{args.train_size}-bs{args.batch_size}-ep{args.num_epoch}'
+    args.experiment_name = f's{args.train_size}_bs{args.batch_size}_ep{args.num_epoch}'
+    now = datetime.datetime.now()
+    SAVE_MODEL_DIR = os.path.join(BASE_DIR,'models/LSUN', now.strftime("%Y%m%d_%H%M_") + args.experiment_name)
+    os.mkdir(SAVE_MODEL_DIR)
     train(args)

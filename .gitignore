@@ -9,3 +9,5 @@ wandb
 test
 
 *.zip
+
+models/*

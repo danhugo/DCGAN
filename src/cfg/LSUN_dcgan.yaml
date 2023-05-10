@@ -1,5 +1,5 @@
 project: 'LSUN_DCGAN' # name of project
-train_size: 2500000 #training data size
+train_size: 10000 #training data size
 
 # Model setting
 batch_size: 128 # batch size
