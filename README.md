@@ -9,11 +9,13 @@ Paper: [Unsupervised Representation Learning with Deep Convolutional Generative 
 The paper used the [LSUN](https://www.yf.io/p/lsun) which is a Large-scale Image Dataset with approax 3 milion bedroom scence images. 
 
 **Generation over interpolated point in noise dimension**
-![](reports/LSUN/interpolated.png)
+![](reports/LSUN/interpolated.png) 
+
 Generation over interpolated points between 11 random noise code to see transition between points. 
 
 **Guided backpropagation to visualize learned feature of Discriminator**
-![](reports/LSUN/guided_bp.png)
+![](reports/LSUN/guided_bp.png) 
+
 Last row illustrates reconstructed images from learned features of trained Discriminator. Middle row is images which conversely are attained from a non-trained Discriminator.
 ## Traning
 - Modify config file in /src/cfg to setup for training process or

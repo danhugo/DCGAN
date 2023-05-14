@@ -1,0 +1,16 @@
+name: dcgan_env
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - torchvision
+  - pytorch
+  - pytorch-cuda
+  - ipykernel
+  - imageio
+  - matplotlib
+  - libgcc
+  - lmdb
+  - wandb
+  - pyyaml
+  - tqdm
