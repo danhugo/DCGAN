@@ -1,7 +1,6 @@
 # LSUN
 This paper used bedroom dataset in LSUN dataset to train the model.  
 To exprerience with LSUN dataset, you need to have these libs in your environment.
-- cURL
 - numpy
 - lmdb
 - opencv
@@ -10,13 +9,13 @@ The paper performed a simple image de-duplication manipulation on dataset by usi
 
 Additionally, Images are scaled down to 32x32 resolution and cropped to square centrally. 
 
-## Doanload data
+## Download data
 ### Manually
 Download functional files. 
 
 ```
-curl -O https://raw.githubusercontent.com/fyu/lsun/master/data.py
-curl -O https://raw.githubusercontent.com/fyu/lsun/master/download.py
+wget https://raw.githubusercontent.com/fyu/lsun/master/data.py
+wget https://raw.githubusercontent.com/fyu/lsun/master/download.py
 
 ```
 
